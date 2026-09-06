@@ -1,0 +1,27 @@
+entity: customer
+version: "2.0-breaking"
+fields:
+  customer_id:
+    type: integer
+    nullable: false
+  full_name:
+    type: string
+    nullable: false
+  email:
+    type: string
+    nullable: false
+  address_line1:
+    type: string
+    nullable: false
+  city:
+    type: string
+    nullable: false
+  state:
+    type: string
+    nullable: false
+  postal_code:
+    type: string
+    nullable: false
+  country:
+    type: string
+    nullable: false

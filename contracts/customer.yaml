@@ -1,0 +1,54 @@
+entity: customer
+version: "1.0"
+owner: customer-data-team
+fields:
+  customer_id:
+    type: string
+    nullable: false
+    unique: true
+    description: Stable customer identifier
+  full_name:
+    type: string
+    nullable: false
+  email:
+    type: string
+    nullable: false
+    format: email
+    classification: pii
+  address_line1:
+    type: string
+    nullable: false
+    classification: pii
+  city:
+    type: string
+    nullable: false
+    classification: pii
+  state:
+    type: string
+    nullable: false
+    format: us_state
+    classification: pii
+  zip_code:
+    type: string
+    nullable: false
+    format: us_zip
+    classification: pii
+  country:
+    type: string
+    nullable: false
+    allowed_values: [US, CA, GB]
+source_authority:
+  customer_id: [crm, billing, support]
+  full_name: [crm, billing, support]
+  email: [crm, billing, support]
+  address_line1: [billing, crm, support]
+  city: [billing, crm, support]
+  state: [billing, crm, support]
+  zip_code: [billing, crm, support]
+  country: [billing, crm, support]
+freshness_hours: 72
+governance:
+  pii_changes_require_approval: true
+  destructive_changes_require_approval: true
+  contract_changes_require_approval: true
+  mandatory_approval_fields: [email, address_line1, city, state, zip_code]

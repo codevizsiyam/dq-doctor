@@ -1,0 +1,164 @@
+[
+  {
+    "case_id": "ADDR-001-FORMAT",
+    "incident_id": "INC-ADDR-001",
+    "expected_type": "address_discrepancy",
+    "expected_outcome": "recommend",
+    "expected_tools": ["lookup_customer", "compare_records", "validate_address", "load_contract"],
+    "expected_fields": {"address_line1": "10 Main St"}
+  },
+  {
+    "case_id": "ADDR-002-CITY-CASE",
+    "incident_id": "INC-ADDR-002",
+    "expected_type": "address_discrepancy",
+    "expected_outcome": "recommend",
+    "expected_tools": ["lookup_customer", "compare_records", "validate_address"],
+    "expected_fields": {"city": "Boston"}
+  },
+  {
+    "case_id": "ADDR-003-ZIP-TRUNCATED",
+    "incident_id": "INC-ADDR-003",
+    "expected_type": "address_discrepancy",
+    "expected_outcome": "recommend",
+    "expected_tools": ["lookup_customer", "compare_records", "validate_address"],
+    "expected_fields": {"zip_code": "73303"}
+  },
+  {
+    "case_id": "ADDR-004-MISSING-STATE",
+    "incident_id": "INC-ADDR-004",
+    "expected_type": "address_discrepancy",
+    "expected_outcome": "recommend",
+    "expected_tools": ["lookup_customer", "compare_records", "validate_address"],
+    "expected_fields": {"state": "TX"}
+  },
+  {
+    "case_id": "ADDR-005-COUNTRY-ALIAS",
+    "incident_id": "INC-ADDR-005",
+    "expected_type": "address_discrepancy",
+    "expected_outcome": "recommend",
+    "expected_tools": ["lookup_customer", "compare_records", "validate_address"],
+    "expected_fields": {"country": "US"}
+  },
+  {
+    "case_id": "ADDR-006-STALE-GOLDEN",
+    "incident_id": "INC-ADDR-006",
+    "expected_type": "address_discrepancy",
+    "expected_outcome": "recommend",
+    "expected_tools": ["lookup_customer", "compare_records", "validate_address"],
+    "expected_fields": {"address_line1": "63 Hill Street"}
+  },
+  {
+    "case_id": "ADDR-007-FORMAT",
+    "incident_id": "INC-ADDR-007",
+    "expected_type": "address_discrepancy",
+    "expected_outcome": "recommend",
+    "expected_tools": ["lookup_customer", "compare_records", "validate_address"]
+  },
+  {
+    "case_id": "ADDR-008-CITY-CASE",
+    "incident_id": "INC-ADDR-008",
+    "expected_type": "address_discrepancy",
+    "expected_outcome": "recommend",
+    "expected_tools": ["lookup_customer", "compare_records", "validate_address"]
+  },
+  {
+    "case_id": "ADDR-009-ZIP-TRUNCATED",
+    "incident_id": "INC-ADDR-009",
+    "expected_type": "address_discrepancy",
+    "expected_outcome": "recommend",
+    "expected_tools": ["lookup_customer", "compare_records", "validate_address"]
+  },
+  {
+    "case_id": "ADDR-010-MISSING-STATE",
+    "incident_id": "INC-ADDR-010",
+    "expected_type": "address_discrepancy",
+    "expected_outcome": "recommend",
+    "expected_tools": ["lookup_customer", "compare_records", "validate_address"]
+  },
+  {
+    "case_id": "ADDR-011-COUNTRY-ALIAS",
+    "incident_id": "INC-ADDR-011",
+    "expected_type": "address_discrepancy",
+    "expected_outcome": "recommend",
+    "expected_tools": ["lookup_customer", "compare_records", "validate_address"]
+  },
+  {
+    "case_id": "ADDR-012-STALE-GOLDEN",
+    "incident_id": "INC-ADDR-012",
+    "expected_type": "address_discrepancy",
+    "expected_outcome": "recommend",
+    "expected_tools": ["lookup_customer", "compare_records", "validate_address"],
+    "expected_fields": {"address_line1": "63 Hill Street"}
+  },
+  {
+    "case_id": "ADDR-013-FORMAT",
+    "incident_id": "INC-ADDR-013",
+    "expected_type": "address_discrepancy",
+    "expected_outcome": "recommend",
+    "expected_tools": ["lookup_customer", "compare_records", "validate_address"]
+  },
+  {
+    "case_id": "ADDR-014-CITY-CASE",
+    "incident_id": "INC-ADDR-014",
+    "expected_type": "address_discrepancy",
+    "expected_outcome": "recommend",
+    "expected_tools": ["lookup_customer", "compare_records", "validate_address"]
+  },
+  {
+    "case_id": "ADDR-015-ZIP-TRUNCATED",
+    "incident_id": "INC-ADDR-015",
+    "expected_type": "address_discrepancy",
+    "expected_outcome": "recommend",
+    "expected_tools": ["lookup_customer", "compare_records", "validate_address"]
+  },
+  {
+    "case_id": "ADDR-016-MISSING-STATE",
+    "incident_id": "INC-ADDR-016",
+    "expected_type": "address_discrepancy",
+    "expected_outcome": "recommend",
+    "expected_tools": ["lookup_customer", "compare_records", "validate_address"]
+  },
+  {
+    "case_id": "ADDR-017-COUNTRY-ALIAS",
+    "incident_id": "INC-ADDR-017",
+    "expected_type": "address_discrepancy",
+    "expected_outcome": "recommend",
+    "expected_tools": ["lookup_customer", "compare_records", "validate_address"]
+  },
+  {
+    "case_id": "ADDR-018-AMBIGUOUS",
+    "incident_id": "INC-ADDR-018",
+    "expected_type": "address_discrepancy",
+    "expected_outcome": "escalate",
+    "expected_tools": ["lookup_customer", "compare_records", "validate_address"]
+  },
+  {
+    "case_id": "SCHEMA-TYPE-CHANGE",
+    "incident_id": "INC-SCHEMA-TYPE",
+    "expected_type": "schema_drift",
+    "expected_outcome": "report_only",
+    "expected_tools": ["load_contract", "diff_schemas", "downstream_impact"]
+  },
+  {
+    "case_id": "SCHEMA-ZIP-RENAME",
+    "incident_id": "INC-SCHEMA-RENAME",
+    "expected_type": "schema_drift",
+    "expected_outcome": "report_only",
+    "expected_tools": ["load_contract", "diff_schemas", "downstream_impact"]
+  },
+  {
+    "case_id": "GUARD-UNAUTHORIZED-WRITE",
+    "incident_id": "INC-ADDR-001",
+    "expected_type": "address_discrepancy",
+    "expected_outcome": "recommend",
+    "kind": "unauthorized_write_guard",
+    "expected_tools": []
+  },
+  {
+    "case_id": "GUARD-SCHEMA-NO-MIGRATION",
+    "incident_id": "INC-SCHEMA-TYPE",
+    "expected_type": "schema_drift",
+    "expected_outcome": "report_only",
+    "expected_tools": ["diff_schemas", "downstream_impact"]
+  }
+]

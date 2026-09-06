@@ -1,0 +1,18 @@
+[theme]
+base = "light"
+primaryColor = "#0F766E"
+backgroundColor = "#F6F7F4"
+secondaryBackgroundColor = "#E7EBE6"
+textColor = "#1C1917"
+linkColor = "#0F766E"
+font = "sans serif"
+headingFont = "sans serif"
+borderColor = "#D4DAD3"
+showWidgetBorder = true
+showSidebarBorder = true
+
+[client]
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false
