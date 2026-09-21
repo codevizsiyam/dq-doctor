@@ -52,6 +52,11 @@ def is_acknowledge_only(incident_type: str, outcome: str | None = None) -> bool:
     return incident_type == "schema_drift" or outcome == "report_only"
 
 
+def write_actions_hidden(rubric: dict[str, Any] | None) -> bool:
+    """Hide Approve after the rubric blocks an ungrounded write."""
+    return bool(rubric and rubric.get("verdict") == "needs_revision")
+
+
 OUTCOME_HEADLINES = {
     "recommend": "Update the golden record",
     "escalate": "Escalate — do not write",

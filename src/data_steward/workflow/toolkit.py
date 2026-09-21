@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import Any, Mapping
 
 from data_steward.config import Settings
 from data_steward.models import DataContract, InvestigationStep
 from data_steward.repositories import Repository
+from data_steward.skills import load_skill, skills_root
 from data_steward.tools import (
     MockAddressValidator,
     compare_records,
@@ -25,6 +27,7 @@ READ_ONLY_TOOLS = (
     "diff_schemas",
     "lookup_lineage",
     "downstream_impact",
+    "load_skill",
 )
 
 OPENAI_TOOL_SPECS = [
@@ -139,6 +142,19 @@ OPENAI_TOOL_SPECS = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "load_skill",
+            "description": "Load a named investigation procedure (reconcile-address or schema-impact). Call again after context compaction.",
+            "parameters": {
+                "type": "object",
+                "properties": {"name": {"type": "string"}},
+                "required": ["name"],
+                "additionalProperties": False,
+            },
+        },
+    },
 ]
 
 
@@ -213,6 +229,8 @@ class InvestigationToolkit:
             return [edge.model_dump(mode="json") for edge in edges]
         if name == "downstream_impact":
             return downstream_impact(list(arguments.get("fields") or []))
+        if name == "load_skill":
+            return load_skill(str(arguments.get("name") or ""), root=_skills_dir(self.settings))
         raise RuntimeError(f"unhandled tool {name}")
 
 
@@ -234,4 +252,15 @@ def _summarize(name: str, payload: Any) -> str:
         return f"{len(payload)} schema changes, breaking={sum(1 for item in payload if item.get('breaking'))}"
     if name == "downstream_impact" and isinstance(payload, dict):
         return f"impacted fields={list(payload)}"
+    if name == "load_skill" and isinstance(payload, dict):
+        if payload.get("error"):
+            return str(payload["error"])
+        return f"loaded skill {payload.get('name')}"
     return json.dumps(payload, default=str)[:240]
+
+
+def _skills_dir(settings: Settings) -> Path:
+    configured = Path(settings.skills_path)
+    if configured.is_dir():
+        return configured
+    return skills_root()

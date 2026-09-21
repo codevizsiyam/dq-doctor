@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     checkpoint_path: Path = Path("data/checkpoints.db")
     contract_path: Path = Path("contracts/customer.yaml")
     breaking_schema_path: Path = Path("fixtures/customer_breaking_schema.yaml")
+    skills_path: Path = Path("skills")
     approval_confidence_threshold: float = Field(default=0.85, ge=0, le=1)
     max_investigator_steps: int = Field(default=6, ge=1, le=20)
     openai_model: str = "gpt-4o-mini"

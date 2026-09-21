@@ -18,5 +18,8 @@ class StewardState(TypedDict):
     remediation: NotRequired[dict[str, Any]]
     phoenix_trace_id: NotRequired[str | None]
     fallback_used: NotRequired[bool]
+    rubric: NotRequired[dict[str, Any]]
+    rubric_attempts: NotRequired[int]
+    rubric_retry: NotRequired[bool]
     status: NotRequired[str]
     error: NotRequired[str | None]

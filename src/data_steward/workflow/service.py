@@ -42,6 +42,7 @@ class RunView:
     schema_changes: list[dict[str, Any]]
     downstream: dict[str, list[str]]
     fallback_used: bool
+    rubric: dict[str, Any] | None
     audit: list[Any]
 
 
@@ -145,6 +146,7 @@ class StewardRuntime:
             schema_changes=list(values.get("schema_changes") or []),
             downstream=dict(values.get("downstream") or {}),
             fallback_used=bool(values.get("fallback_used")),
+            rubric=values.get("rubric"),
             audit=self.repository.get_audit(incident_id),
         )
 

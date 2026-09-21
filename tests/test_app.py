@@ -8,6 +8,8 @@ def test_streamlit_app_is_import_safe():
     assert "Work queue" in source
     assert "is_acknowledge_only" in source
     assert "Acknowledge (no migration)" in source
+    assert "Rubric" in source
+    assert "hallucinated street" in source
     assert "st.json" in source
     assert "DQ Doctor" in source
     assert "st.logo" in source

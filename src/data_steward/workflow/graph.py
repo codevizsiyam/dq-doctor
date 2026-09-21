@@ -22,6 +22,8 @@ from data_steward.models import (
 from data_steward.observability.phoenix import current_trace_id
 from data_steward.remediation import RemediationService
 from data_steward.repositories import Repository
+from data_steward.rubric import grade_recommendation
+from data_steward.tools import lookup_customer
 from data_steward.workflow.investigator import run_investigator
 from data_steward.workflow.state import StewardState
 from data_steward.workflow.toolkit import InvestigationToolkit
@@ -42,12 +44,18 @@ def build_graph(context: WorkflowContext, checkpointer: Any):
     graph.add_node("load_incident", lambda state: _load_incident(context, state))
     graph.add_node("investigate", lambda state: _investigate(context, state))
     graph.add_node("validate_policy", lambda state: _validate_policy(context, state))
+    graph.add_node("grade_recommendation", lambda state: _grade_recommendation(context, state))
     graph.add_node("human_review", _human_review)
     graph.add_node("apply_decision", lambda state: _apply_decision(context, state))
     graph.add_edge(START, "load_incident")
     graph.add_edge("load_incident", "investigate")
     graph.add_edge("investigate", "validate_policy")
-    graph.add_edge("validate_policy", "human_review")
+    graph.add_edge("validate_policy", "grade_recommendation")
+    graph.add_conditional_edges(
+        "grade_recommendation",
+        _route_after_rubric,
+        {"investigate": "investigate", "human_review": "human_review"},
+    )
     graph.add_edge("human_review", "apply_decision")
     graph.add_edge("apply_decision", END)
     return graph.compile(checkpointer=checkpointer)
@@ -102,7 +110,7 @@ def _investigate(context: WorkflowContext, state: StewardState) -> dict[str, Any
         context.repository.save_proposal(proposal)
     context.repository.append_audit(
         AuditEvent(
-            event_id=f"investigate:{incident.incident_id}",
+            event_id=f"investigate:{incident.incident_id}:{state.get('rubric_attempts') or 0}",
             incident_id=incident.incident_id,
             proposal_id=proposal.proposal_id if proposal else None,
             action="investigation_completed",
@@ -113,19 +121,25 @@ def _investigate(context: WorkflowContext, state: StewardState) -> dict[str, Any
                 "fallback_used": recommendation.fallback_used,
                 "classified_type": recommendation.classified_type,
                 "phoenix_trace_id": state.get("phoenix_trace_id"),
+                "rubric_attempts": state.get("rubric_attempts") or 0,
             },
         )
     )
+    prior = list(state.get("tool_trace") or []) if state.get("rubric_attempts") else []
+    tool_trace = prior + steps
+    for index, item in enumerate(tool_trace, start=1):
+        item["step"] = index
     return {
         "recommendation": recommendation.model_dump(mode="json"),
-        "tool_trace": steps,
-        "step_count": len(steps),
+        "tool_trace": tool_trace,
+        "step_count": len(tool_trace),
         "proposal_id": proposal.proposal_id if proposal else None,
         "schema_changes": extras.get("schema_changes") or [],
         "downstream": extras.get("downstream") or {},
         "fallback_used": recommendation.fallback_used,
         "classified_type": recommendation.classified_type,
         "status": status.value,
+        "rubric_retry": False,
     }
 
 
@@ -191,6 +205,68 @@ def _validate_policy(context: WorkflowContext, state: StewardState) -> dict[str,
     }
 
 
+def _grade_recommendation(context: WorkflowContext, state: StewardState) -> dict[str, Any]:
+    incident = Incident.model_validate(state["incident"])
+    recommendation = Recommendation.model_validate(state["recommendation"])
+    records = lookup_customer(context.repository, incident.customer_id) if incident.customer_id else []
+    result = grade_recommendation(incident, recommendation, records)
+    attempts = int(state.get("rubric_attempts") or 0)
+    context.repository.append_audit(
+        AuditEvent(
+            event_id=f"rubric:{incident.incident_id}:{attempts}",
+            incident_id=incident.incident_id,
+            proposal_id=state.get("proposal_id"),
+            action="rubric_graded",
+            actor="rubric",
+            details={
+                "verdict": result.verdict,
+                "reasons": result.reasons,
+                "warnings": result.warnings,
+                "attempts": attempts,
+            },
+        )
+    )
+    payload: dict[str, Any] = {
+        "rubric": result.model_dump(mode="json"),
+        "rubric_attempts": attempts,
+        "rubric_retry": False,
+    }
+    if result.verdict == "satisfied":
+        return payload
+    if attempts < 1:
+        payload["rubric_attempts"] = 1
+        payload["rubric_retry"] = True
+        payload["status"] = IncidentStatus.INVESTIGATING.value
+        return payload
+
+    recommendation = recommendation.model_copy(
+        update={
+            "outcome": "escalate",
+            "changes": [],
+            "candidate_value": {},
+            "uncertainty": "Rubric rejected an ungrounded or unsafe write after one revision.",
+            "rationale": recommendation.rationale
+            + " Rubric failed after one revision: "
+            + "; ".join(result.reasons),
+        }
+    )
+    context.repository.save_incident(
+        incident.model_copy(update={"status": IncidentStatus.ESCALATED})
+    )
+    payload.update(
+        {
+            "recommendation": recommendation.model_dump(mode="json"),
+            "proposal_id": None,
+            "status": IncidentStatus.ESCALATED.value,
+        }
+    )
+    return payload
+
+
+def _route_after_rubric(state: StewardState) -> str:
+    return "investigate" if state.get("rubric_retry") else "human_review"
+
+
 def _human_review(state: StewardState) -> dict[str, Any]:
     decision = interrupt(
         {
@@ -199,6 +275,7 @@ def _human_review(state: StewardState) -> dict[str, Any]:
             "validation": state.get("validation"),
             "governance": state.get("governance"),
             "proposal_id": state.get("proposal_id"),
+            "rubric": state.get("rubric"),
         }
     )
     return {"human_decision": decision}

@@ -1,14 +1,26 @@
 # Data Steward AI
 
-Governed investigation and remediation for customer data quality. A bounded Investigator Agent gathers evidence with read-only tools, a deterministic policy layer validates every proposal, and Streamlit pauses for human approval before any golden-record write.
+Governed investigation and remediation for customer data quality. A bounded Investigator Agent loads a named skill, gathers evidence with read-only tools, a deterministic policy layer validates every proposal, a code rubric grades the recommendation, and Streamlit pauses for human approval before any golden-record write.
 
-This repository implements the Saturday MVP described in `spec_draft.md`: address reconciliation plus schema-impact reporting. It does not auto-migrate schemas and it never writes without a persisted approval.
+This repository implements address reconciliation plus schema-impact reporting. It does not auto-migrate schemas and it never writes without a persisted approval.
 
 ## What you can demo
 
-1. **Happy path.** `INC-ADDR-012` has a stale golden address. Investigate, inspect CRM/Billing/Support evidence, approve, and verify the golden record plus audit trail.
+1. **Happy path.** `INC-ADDR-012` has a stale golden address. Investigate, inspect CRM/Billing/Support evidence, confirm the rubric is satisfied, approve, and verify the golden record plus audit trail.
 2. **Ambiguous / reject path.** `INC-ADDR-018` has three different valid streets. The agent escalates. Rejecting leaves golden data unchanged.
 3. **Schema impact path.** `INC-SCHEMA-TYPE` (and `INC-SCHEMA-RENAME`) show a breaking contract diff and downstream lineage. Acknowledge the report; nothing is migrated.
+
+## Product changes
+
+These are the harness additions on top of the original HITL write path (`validate_policy` → human review → `RemediationService.apply` only).
+
+**Skills.** Two markdown procedures live in the repo: `skills/reconcile-address/SKILL.md` (address discrepancy) and `skills/schema-impact/SKILL.md` (schema drift). The investigator prompt includes a catalog. Matching skill is auto-loaded from `incident_type` via the read-only `load_skill` tool. In the UI, expand **Investigation timeline** after a run: row 1 should be `load_skill` with `reconcile-address` or `schema-impact`.
+
+**Rubric before the human.** After policy, a deterministic `grade_recommendation` checks that every proposed value appears in retrieved records, schema/report-only tickets propose no golden writes, three distinct valid streets escalate instead of writing, and address evidence refs parse as `source:record_id:field`. Satisfied → Approve / Acknowledge as before. Failed → one automatic re-investigate. Still failing → escalate and **Approve is hidden**, so a steward never applies a hallucinated street. This is code, not the LLM judge.
+
+**LLM judge stays eval-only.** `data-steward-eval --judge` still scores evidence grounding with `gpt-4o-mini`. It does not run in Streamlit and it never authorizes a write. The UI rubric and the eval judge can both be used; they answer different questions.
+
+**Batch lookup loop.** `data-steward-eval --queue` walks ~20 open incidents with `lookup_customer` / `compare_records` only. Assert `errors=0`, `unauthorized_tools=0`, `writes=0`. This is not the CI golden bar and it never calls apply. If `data-steward-eval` cannot import `data_steward`, run `PYTHONPATH=src data-steward-eval --queue`.
 
 ## Setup
 
@@ -51,7 +63,7 @@ This recreates `data/data_steward.db` with 18 customers × 4 systems, 20 inciden
 streamlit run app.py
 ```
 
-Inbox is a sidebar **work queue**. Click a pinned demo incident → **Run investigation** → review the comparison or schema diff → Approve / Edit / Reject / Acknowledge. Open **Activity** in the top nav for counts and the audit trail. Each investigation stores a Phoenix trace id when tracing is enabled.
+Inbox is a sidebar **work queue**. Click a pinned demo incident → **Run investigation** → review the comparison or schema diff, the **Rubric** panel, and **Investigation timeline** (`load_skill` first) → Approve / Edit / Reject / Acknowledge. Open **Activity** in the top nav for counts and the audit trail. Each investigation stores a Phoenix trace id when tracing is enabled.
 
 ## Evaluations
 
@@ -59,6 +71,8 @@ Inbox is a sidebar **work queue**. Click a pinned demo incident → **Run invest
 data-steward-eval
 # optional LLM grounding judge (skipped if OPENAI_API_KEY is unset):
 data-steward-eval --judge
+# optional Assignment 2 batch reads (lookup_customer/compare_records only, no writes):
+data-steward-eval --queue
 # or
 python -m data_steward.evaluations
 ```
@@ -75,7 +89,7 @@ CI / pytest is the **code-based bar** (deterministic fallback, no LLM judge):
 
 When Arize is configured, each judged golden case is also traced to project `data-steward-ai` with `eval.llm_grounding` and `eval.heuristic_grounding` scores on the span. Optionally `pip install -e ".[evals]"` installs the Arize SDK so those scores also fill the Evaluations column (`arize_eval_status=published`). Arize does not replace the judge model; it stores and displays the scores.
 
-Golden cases live in `evals/golden_cases.json`.
+Golden cases live in `evals/golden_cases.json`. See **Product changes** for `--queue` and the live rubric.
 
 ## Tests
 
@@ -83,13 +97,13 @@ Golden cases live in `evals/golden_cases.json`.
 pytest
 ```
 
-Covered paths include contract validation, schema diffs, approval enforcement, idempotent remediation, the three demo workflows, and the evaluation bar.
+Covered paths include contract validation, schema diffs, approval enforcement, idempotent remediation, the three demo workflows, skills/`load_skill`, the live rubric, the batch lookup queue, and the evaluation bar.
 
 ## Offline fallback
 
 The demo is designed to survive a missing or failing OpenAI key:
 
-- The investigator selects the same read-only tools and emits a structured recommendation from contract authority + the mock address validator.
+- The investigator loads the matching skill, selects the same read-only tools, and emits a structured recommendation from contract authority + the mock address validator.
 - Human approval, remediation, verification, and audit are fully deterministic.
 - Evaluations use the fallback path in CI so scores are repeatable.
 
@@ -112,22 +126,12 @@ data-steward-eval --judge
 
 Open the same Arize project and look for `operation=golden_eval` spans. Each span has `eval.llm_grounding.label` (`PASS`/`FAIL`). Unauthorized-write checks stay code-based and are not sent to the judge.
 
-## Five-minute rehearsal
-
-1. Reset/seed data from the sidebar.
-2. Click pinned `INC-ADDR-012` in the queue. Show the CRM/Billing/Support/golden comparison table.
-3. Run investigation. Walk the proposed change, evidence citations, and policy line.
-4. Approve. Show before/after on the same page.
-5. Click `INC-ADDR-018`. Show the escalation and reject it. Golden stays unchanged.
-6. Click `INC-SCHEMA-TYPE`. Show the type/rename diff, downstream chips, and acknowledge with no migration.
-7. Open **Activity** in the top nav, then the Arize AX project `data-steward-ai` in the same space.
-
-Saturday morning: reseed, confirm `.env` keys, run `pytest` plus one Streamlit smoke path, and keep this README plus eval output as fallback.
-
 ## Architecture notes
 
 - Package: `src/data_steward`
 - Only write path: `RemediationService.apply`, which requires a persisted `approved` decision
-- Investigator tools are read-only; unauthorized tool names are blocked
+- Investigator tools are read-only (`lookup_customer`, `compare_records`, `validate_address`, `load_contract`, `diff_schemas`, `lookup_lineage`, `downstream_impact`, `load_skill`); unauthorized tool names are blocked
+- Skills are product procedures in `skills/*/SKILL.md`, not write tools
+- A code rubric grades recommendations before human review; the LLM judge is eval-only and never authorizes a write
 - LangGraph checkpoints are stored separately from application tables (`data/checkpoints.db`)
 - Resume uses a stable thread id equal to the incident id

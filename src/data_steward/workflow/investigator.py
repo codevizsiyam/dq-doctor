@@ -6,8 +6,9 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from data_steward.models import FieldChange, Incident, Recommendation
+from data_steward.skills import prompt_catalog, skill_for_incident
 from data_steward.workflow.fallback import fallback_recommendation
-from data_steward.workflow.toolkit import OPENAI_TOOL_SPECS, InvestigationToolkit
+from data_steward.workflow.toolkit import OPENAI_TOOL_SPECS, InvestigationToolkit, _skills_dir
 
 SYSTEM_PROMPT = """You are the single Data Steward Investigator Agent.
 Use only the provided read-only tools. Never invent records, never write data, and never call unauthorized tools.
@@ -16,6 +17,10 @@ Investigate the incident, then stop when you have enough evidence to either:
 - escalate because the evidence is ambiguous, or
 - report a schema change and its downstream impact without migrating it.
 Cite evidence_refs as source:record_id:field. Confidence alone never authorizes a write.
+
+Available skills (call load_skill by name; call it again after any context compaction):
+{catalog}
+Follow the loaded skill. Do not invent a procedure that is not in the catalog.
 """
 
 JsonPrimitive = str | int | float | bool | None
@@ -108,8 +113,11 @@ def _run_openai(
     from openai import OpenAI
 
     client = OpenAI(api_key=toolkit.settings.openai_api_key)
+    steps: list[dict[str, Any]] = []
+    extras: dict[str, Any] = {"schema_changes": [], "downstream": {}}
+    skill = load_matching_skill(incident, toolkit, steps)
     messages: list[dict[str, Any]] = [
-        {"role": "system", "content": SYSTEM_PROMPT},
+        {"role": "system", "content": _system_prompt(toolkit, skill)},
         {
             "role": "user",
             "content": json.dumps(
@@ -125,8 +133,6 @@ def _run_openai(
             ),
         },
     ]
-    steps: list[dict[str, Any]] = []
-    extras: dict[str, Any] = {"schema_changes": [], "downstream": {}}
     for _ in range(toolkit.settings.max_investigator_steps):
         response = client.chat.completions.create(
             model=toolkit.settings.openai_model,
@@ -194,6 +200,42 @@ def _run_openai(
     recommendation.fallback_used = False
     if not recommendation.classified_type:
         recommendation.classified_type = incident.incident_type
-    if not steps:
+    if not [step for step in steps if step["tool_name"] != "load_skill"]:
         return fallback_recommendation(incident, toolkit)
     return recommendation, steps, extras
+
+
+def load_matching_skill(
+    incident: Incident,
+    toolkit: InvestigationToolkit,
+    steps: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Load the skill for this incident_type. Does not consume an OpenAI tool step."""
+    name = skill_for_incident(incident.incident_type)
+    if not name:
+        return {}
+    payload, step, _authorized = toolkit.execute("load_skill", {"name": name})
+    recorded = step.model_dump(mode="json")
+    recorded["step"] = len(steps) + 1
+    steps.append(recorded)
+    return payload if isinstance(payload, dict) else {}
+
+
+def reload_skill_message(incident: Incident, toolkit: InvestigationToolkit) -> dict[str, Any]:
+    """User message with the matching skill body. Call after future context compaction."""
+    name = skill_for_incident(incident.incident_type)
+    if not name:
+        return {"role": "user", "content": json.dumps({"error": "no skill mapped"})}
+    payload, _step, _authorized = toolkit.execute("load_skill", {"name": name})
+    return {"role": "user", "content": json.dumps({"loaded_skill": payload}, default=str)[:8000]}
+
+
+def _system_prompt(toolkit: InvestigationToolkit, skill: dict[str, Any]) -> str:
+    catalog = prompt_catalog(_skills_dir(toolkit.settings))
+    catalog_lines = "\n".join(
+        f"- {item['name']}: {item['description']}" for item in catalog
+    ) or "- (none found)"
+    prompt = SYSTEM_PROMPT.format(catalog=catalog_lines)
+    if skill and not skill.get("error"):
+        prompt += f"\n\nLoaded skill `{skill.get('name')}`:\n{skill.get('body', '')}"
+    return prompt

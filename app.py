@@ -43,6 +43,7 @@ from data_steward.ui import (
     recommendation_change_frame,
     schema_diff_rows,
     type_label,
+    write_actions_hidden,
 )
 from data_steward.workflow.service import StewardRuntime
 
@@ -292,6 +293,7 @@ def _render_workbench(steward: StewardRuntime, view) -> None:
             {
                 "validation": view.validation,
                 "governance": view.governance,
+                "rubric": view.rubric,
                 "schema_changes": view.schema_changes,
                 "downstream": view.downstream,
                 "remediation": view.remediation,
@@ -404,6 +406,32 @@ def _render_recommendation(view) -> None:
             st.caption(policy_line)
         if view.validation and not view.validation.get("valid", True):
             st.error("Policy validation failed: " + "; ".join(view.validation.get("errors") or []))
+        _render_rubric(view)
+
+
+def _render_rubric(view) -> None:
+    rubric = view.rubric
+    if not rubric:
+        return
+    st.markdown("**Rubric**")
+    if rubric.get("verdict") == "satisfied":
+        st.caption("Grounded in retrieved records. The steward never sees a hallucinated street.")
+    else:
+        st.error("Rubric needs revision: " + "; ".join(rubric.get("reasons") or []))
+    checks = rubric.get("checks") or []
+    if checks:
+        st.dataframe(
+            [
+                {
+                    "Check": item.get("name"),
+                    "Result": "pass" if item.get("passed") else "fail",
+                    "Detail": item.get("detail"),
+                }
+                for item in checks
+            ],
+            hide_index=True,
+            width="stretch",
+        )
 
 
 def _render_decision(steward: StewardRuntime, view) -> None:
@@ -422,6 +450,18 @@ def _render_decision(steward: StewardRuntime, view) -> None:
         acknowledge_only = is_acknowledge_only(
             view.incident.incident_type, recommendation.outcome
         )
+        blocked = write_actions_hidden(view.rubric)
+        if blocked and not acknowledge_only:
+            st.error(
+                "Rubric blocked this write. Approve is hidden so a steward never applies a hallucinated street."
+            )
+            if st.button("Reject", type="primary", width="stretch"):
+                steward.decide(
+                    view.incident.incident_id,
+                    HumanDecision(action="reject", reviewer=reviewer, comment=comment),
+                )
+                st.rerun()
+            return
         if not acknowledge_only and recommendation.changes:
             st.caption("Edit proposed values, then use Edit and approve.")
             for change in recommendation.changes:

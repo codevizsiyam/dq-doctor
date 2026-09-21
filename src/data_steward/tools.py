@@ -123,6 +123,20 @@ def validate_address(address: Mapping[str, Any]) -> AddressValidation:
     return AddressValidation(valid=not errors, normalized=normalized, errors=errors)
 
 
+def distinct_valid_operational_streets(records: list[SourceRecord]) -> set[str]:
+    """Normalized streets from CRM/Billing/Support that the mock validator accepts."""
+    streets: set[str] = set()
+    for record in records:
+        if str(record.source) == "golden":
+            continue
+        payload = validate_address(record.data)
+        if payload.valid:
+            street = payload.normalized.get("address_line1")
+            if street:
+                streets.add(street)
+    return streets
+
+
 def diff_schemas(
     expected_fields: Mapping[str, Mapping[str, Any]],
     actual_fields: Mapping[str, Mapping[str, Any]],

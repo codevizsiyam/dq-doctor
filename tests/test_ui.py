@@ -15,6 +15,7 @@ from data_steward.ui import (
     recommendation_change_frame,
     schema_diff_rows,
     type_label,
+    write_actions_hidden,
 )
 
 
@@ -96,6 +97,8 @@ def test_schema_diff_rows_and_labels():
     assert is_acknowledge_only("schema_drift", "recommend") is True
     assert is_acknowledge_only("address_discrepancy", "recommend") is False
     assert is_acknowledge_only("address_discrepancy", "report_only") is True
+    assert write_actions_hidden({"verdict": "needs_revision"}) is True
+    assert write_actions_hidden({"verdict": "satisfied"}) is False
 
 
 def test_recommendation_display_helpers():

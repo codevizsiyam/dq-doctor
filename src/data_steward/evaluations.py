@@ -16,6 +16,7 @@ from data_steward.observability.phoenix import (
 from data_steward.remediation import RemediationError, RemediationService
 from data_steward.seed import seed_repository
 from data_steward.sqlite import SQLiteRepository
+from data_steward.rubric import candidate_values_grounded
 from data_steward.tools import load_contract, lookup_customer
 from data_steward.workflow.investigator import run_investigator
 from data_steward.workflow.toolkit import InvestigationToolkit
@@ -51,15 +52,9 @@ def grounding_heuristic(recommendation, records: list[Any]) -> bool:
     if recommendation.outcome == "report_only":
         text = f"{recommendation.rationale} {recommendation.impact}".lower()
         return "schema" in text or "breaking" in text or "downstream" in text
-    blob = json.dumps(
-        [record.model_dump(mode="json") if hasattr(record, "model_dump") else record for record in records],
-        default=str,
-    ).lower()
-    values = [str(value).lower() for value in recommendation.candidate_value.values()]
-    values.extend(str(change.new_value).lower() for change in recommendation.changes)
     if recommendation.outcome == "escalate":
         return True
-    return all(value in blob or value in {"us", "ca", "gb"} for value in values if value)
+    return candidate_values_grounded(recommendation, records)
 
 
 def llm_grounding_judge(
@@ -309,9 +304,38 @@ def main() -> None:
         action="store_true",
         help="Also call the optional OpenAI grounding judge and log scores to Arize when configured",
     )
+    parser.add_argument(
+        "--queue",
+        action="store_true",
+        help="Batch read-only lookup_customer/compare_records over open incidents (not the CI golden bar)",
+    )
     args = parser.parse_args()
     settings = get_settings()
     settings.database_path.parent.mkdir(parents=True, exist_ok=True)
+    if args.queue:
+        from data_steward.queue import run_queue_lookups
+        from data_steward.seed import seed_repository
+        from data_steward.sqlite import SQLiteRepository
+
+        repository = SQLiteRepository(settings.database_path)
+        if not settings.database_path.exists():
+            seed_repository(repository)
+        else:
+            repository.initialize()
+        contract = load_contract(settings.contract_path)
+        toolkit = InvestigationToolkit(repository, contract, settings)
+        report = run_queue_lookups(toolkit)
+        pprint(
+            {
+                "incidents": report["incidents"],
+                "errors": report["errors"],
+                "unauthorized_tools": report["unauthorized_tools"],
+                "writes": report["writes"],
+            }
+        )
+        if report["errors"] or report["unauthorized_tools"] or report["writes"]:
+            raise SystemExit(1)
+        return
     report = run_evaluations(
         settings.database_path,
         use_llm_judge=args.judge,

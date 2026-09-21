@@ -3,7 +3,8 @@ from __future__ import annotations
 from typing import Any
 
 from data_steward.models import FieldChange, Incident, Recommendation, SourceSystem
-from data_steward.tools import compare_records, lookup_customer
+from data_steward.skills import skill_for_incident
+from data_steward.tools import compare_records, distinct_valid_operational_streets, lookup_customer
 from data_steward.workflow.toolkit import InvestigationToolkit
 
 COUNTRY_ALIASES = {
@@ -23,6 +24,9 @@ def fallback_recommendation(
 ) -> tuple[Recommendation, list[dict[str, Any]], dict[str, Any]]:
     steps: list[dict[str, Any]] = []
     extras: dict[str, Any] = {"schema_changes": [], "downstream": {}}
+    skill_name = skill_for_incident(incident.incident_type)
+    if skill_name:
+        _recorded(toolkit, steps, "load_skill", {"name": skill_name})
     if incident.incident_type == "schema_drift":
         recommendation = _schema_fallback(incident, toolkit, steps, extras)
     else:
@@ -94,11 +98,7 @@ def _address_fallback(
         payload = _recorded(toolkit, steps, "validate_address", record.data)
         validations[str(record.source)] = payload
 
-    distinct_valid_streets = {
-        validations[source]["normalized"]["address_line1"]
-        for source, payload in validations.items()
-        if payload.get("valid") and source != SourceSystem.GOLDEN
-    }
+    distinct_valid_streets = distinct_valid_operational_streets(records)
     if len(distinct_valid_streets) >= 3:
         return Recommendation(
             outcome="escalate",
